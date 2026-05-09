@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoLock - Encrypt</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+
+    <style>
+        body { 
+            background: #f8f9fa; 
+            padding-top: 20px; 
+        }
+
+        h1 {
+            font-size: 1.8rem;
+        }
+
+        #map { 
+            height: 450px; 
+            border-radius: 12px; 
+            width: 100%;
+        }
+
+        .card { 
+            border-radius: 12px; 
+        }
+
+        /* 📱 Tablet & Mobile */
+        @media (max-width: 768px) {
+            body {
+                padding-top: 10px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            #map {
+                height: 300px;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .d-flex {
+                flex-direction: column !important;
+                align-items: stretch !important;
+            }
+
+            .d-flex .btn {
+                margin-bottom: 10px;
+            }
+        }
+
+        /* 📱 Small Mobile */
+        @media (max-width: 480px) {
+            #map {
+                height: 250px;
+            }
+
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="text-center mb-4">
+        <h1>🔒 EchoLock System</h1>
+        <p class="text-muted">Login Protected Geo-Encryption System</p>
+
+        {% if user %}
+        <p class="text-success">👤 Logged in as: {{ user.username }}</p>
+        {% endif %}
+    </div>
+
+    <!-- ENCRYPT CARD -->
+    <div class="card shadow">
+        <div class="card-body">
+
+            <!-- FILE -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Select File</label>
+                <input type="file" id="fileInput" class="form-control">
+            </div>
+
+            <!-- PASSWORD -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Password</label>
+                <input type="password" id="password" class="form-control" placeholder="Enter strong password">
+            </div>
+
+            <!-- RADIUS -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Allowed Radius (meters)</label>
+                <input type="number" id="radius" value="200" class="form-control">
+            </div>
+
+            <!-- MAP -->
+            <div id="map"></div>
+
+            <!-- BUTTON -->
+            <div class="d-flex justify-content-center flex-wrap">
+                <button onclick="startEncryption()" class="btn btn-success mt-3">
+                    🔐 Encrypt & Download
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- STATUS -->
+    <div id="status" class="mt-3"></div>
+
+    <!-- NAVIGATION -->
+    <div class="text-center mt-4 d-flex justify-content-center flex-wrap">
+        <a href="/decrypt" class="btn btn-outline-primary m-1">🔓 Decrypt</a>
+        <a href="/logs" class="btn btn-outline-info m-1">📊 Logs</a>
+        <a href="/logout" class="btn btn-outline-danger m-1">⏻ Logout</a>
+    </div>
+
+</div>
+
+<script>
+let targetLat = null;
+let targetLng = null;
+
+let map = L.map('map').setView([31.5, 72.3], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: ''
+}).addTo(map);
+
+let marker, circle;
+
+// 📍 Select location from map
+map.on('click', function(e) {
+
+    targetLat = e.latlng.lat;
+    targetLng = e.latlng.lng;
+
+    if (marker) map.removeLayer(marker);
+    if (circle) map.removeLayer(circle);
+
+    marker = L.marker([targetLat, targetLng]).addTo(map);
+
+    circle = L.circle([targetLat, targetLng], {
+        radius: document.getElementById('radius').value || 200,
+        color: 'green',
+        fillOpacity: 0.2
+    }).addTo(map);
+});
+
+// 🔁 Update radius live
+document.getElementById('radius').addEventListener('input', function() {
+    if (circle && targetLat && targetLng) {
+
+        map.removeLayer(circle);
+
+        circle = L.circle([targetLat, targetLng], {
+            radius: this.value,
+            color: 'green',
+            fillOpacity: 0.2
+        }).addTo(map);
+    }
+});
+
+// 🚀 START ENCRYPTION
+async function startEncryption() {
+
+    const status = document.getElementById('status');
+    const file = document.getElementById('fileInput').files[0];
+    const password = document.getElementById('password').value;
+    const radius = parseInt(document.getElementById('radius').value);
+
+    if (!file || !password) {
+        status.innerHTML = `<div class="alert alert-danger">Select file and password</div>`;
+        return;
+    }
+
+    // ✅ If location selected manually
+    if (targetLat !== null && targetLng !== null) {
+
+        status.innerHTML = `<div class="alert alert-success">
+            📍 Using selected location ✔ ${targetLat.toFixed(4)}, ${targetLng.toFixed(4)}
+        </div>`;
+
+        encryptFile(file, password, radius);
+        return;
+    }
+
+    // ❗ Otherwise use GPS
+    status.innerHTML = `<div class="alert alert-info">📍 Getting GPS location...</div>`;
+
+    navigator.geolocation.getCurrentPosition((pos) => {
+
+        targetLat = pos.coords.latitude;
+        targetLng = pos.coords.longitude;
+
+        status.innerHTML = `<div class="alert alert-success">
+            📍 GPS location locked ✔ ${targetLat.toFixed(4)}, ${targetLng.toFixed(4)}
+        </div>`;
+
+        encryptFile(file, password, radius);
+
+    }, () => {
+        status.innerHTML = `<div class="alert alert-danger">
+            Enable GPS or select location on map
+        </div>`;
+    });
+}
+
+// 🔐 ENCRYPT FUNCTION
+function encryptFile(file, password, radius) {
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+
+        // 🔑 Location factor
+        const locationFactor = CryptoJS.SHA256(
+            `${targetLat},${targetLng},${radius}`
+        ).toString();
+
+        const salt = CryptoJS.lib.WordArray.random(16);
+        const iv = CryptoJS.lib.WordArray.random(16);
+
+        const key = CryptoJS.PBKDF2(password + locationFactor, salt, {
+            keySize: 256/32,
+            iterations: 10000
+        });
+
+        const wordArray = CryptoJS.lib.WordArray.create(e.target.result);
+
+        const encrypted = CryptoJS.AES.encrypt(wordArray, key, { iv: iv });
+
+        const metadata = {
+            filename: file.name,
+            target_lat: targetLat,
+            target_long: targetLng,
+            radius: radius,
+            salt: salt.toString(),
+            iv: iv.toString()
+        };
+
+        const payload = {
+            metadata: metadata,
+            ciphertext: encrypted.toString()
+        };
+
+        // OPTIONAL backend save
+        fetch('/save_file', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        // 📥 Download encrypted file
+        const blob = new Blob([JSON.stringify(payload)], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name + ".echolock";
+        a.click();
+
+        document.getElementById('status').innerHTML =
+            `<div class="alert alert-success">
+                🔐 Encryption completed successfully ✔
+            </div>`;
+    };
+
+    reader.readAsArrayBuffer(file);
+}
+</script>
+
+</body>
+</html>

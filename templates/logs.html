@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Logs - EchoLock</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <style>
+        body { background: #f8f9fa; padding-top: 30px; }
+        .log-card { transition: all 0.3s; }
+        .log-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.12); }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>📊 EchoLock Activity Logs</h1>
+
+        <div>
+            <a href="/" class="btn btn-outline-primary me-2">🔐 Encrypt</a>
+            <a href="/decrypt" class="btn btn-outline-success me-2">🔓 Decrypt</a>
+
+            <!-- ✅ NEW BUTTON -->
+            <button onclick="clearLogs()" class="btn btn-warning me-2">
+                🧹 Clear Logs
+            </button>
+
+            <a href="/logout" class="btn btn-outline-danger">⏻ Logout</a>
+        </div>
+    </div>
+
+    <!-- LOGS -->
+    {% if logs %}
+    <div class="row" id="logContainer">
+
+        {% for log in logs %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card log-card h-100">
+                <div class="card-body">
+
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="card-title">
+                            {% if log.action == 'encrypt' or log.action == 'upload' %}
+                                🔐 File Encrypted
+                            {% else %}
+                                🔓 Decryption Attempt
+                            {% endif %}
+                        </h5>
+
+                        <span class="badge 
+                            {% if log.status == 'success' %}bg-success{% else %}bg-danger{% endif %} fs-6">
+                            {{ log.status|upper }}
+                        </span>
+                    </div>
+
+                    <p class="text-muted small mb-2">
+                        {{ log.timestamp.strftime('%d %b %Y • %I:%M %p') }}
+                    </p>
+
+                    <p><strong>File:</strong> {{ log.details }}</p>
+
+                    {% if log.location_info %}
+                    <p><strong>Location:</strong> {{ log.location_info }}</p>
+                    {% endif %}
+
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+    </div>
+
+    {% else %}
+    <div class="text-center py-5">
+        <h4 class="text-muted">No activity logs yet</h4>
+        <p class="text-muted">Your encryption and decryption activities will appear here automatically.</p>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- ✅ JAVASCRIPT -->
+<script>
+async function clearLogs() {
+    if (!confirm("Are you sure you want to delete all logs?")) {
+        return;
+    }
+
+    try {
+        const res = await fetch('/clear_logs', {
+            method: 'POST'
+        });
+
+        const data = await res.json();
+
+        if (data.status === "success") {
+            alert("All logs cleared!");
+            location.reload();
+        } else {
+            alert("Failed to clear logs");
+        }
+
+    } catch (err) {
+        alert("Error clearing logs");
+    }
+}
+</script>
+
+</body>
+</html>
